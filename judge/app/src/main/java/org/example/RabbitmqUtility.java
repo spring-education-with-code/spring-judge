@@ -40,12 +40,38 @@ public class RabbitmqUtility {
             //알맞은 디렉토리에 사용자 코드 (controller, service) 를 붙여넣기
             updateContent(dtoMap);
 
-            if(!dbUtility.isThereSameMySqlSubmit(dtoMap)){
-                //스프링 빌드
-                int exitCode = build(dtoMap);
-                //db 업데이트
-                dbUtility.updateSQL(dtoMap, exitCode);
+            int isCorrect;
+            int isThereSameRedisSubmit = dbUtility.isThereSameRedisSubmit(dtoMap);
+            if(isThereSameRedisSubmit != -1) {
+                //redis 에 이미 값이 있는 경우
+                System.out.println("레디스에 기존 제출이 있습니다");
+                isCorrect = isThereSameRedisSubmit;
+            }else{
+                //redis 에 이미 값이 없는 경우
+                int isThereSameMySqlSubmit = dbUtility.isThereSameMySqlSubmit(dtoMap);
+                if(isThereSameMySqlSubmit != -1){
+                    //redis 에는 없으나 mysql 에는 기존 제출이 있는 경우
+                    System.out.println("mysql에 기존 제출이 있습니다");
+                    isCorrect = isThereSameMySqlSubmit;
+
+                }else{
+                    //스프링 빌드
+                    int exitCode = build(dtoMap);
+
+                    if(exitCode == 0){
+                        isCorrect = 1;
+                    }else{
+                        isCorrect = 0;
+                    }
+
+                    //db 제출 이력 삽입
+                    dbUtility.insertSQL(dtoMap, isCorrect);
+                }
+                //redis에 제출 이력 삽입
+                dbUtility.insertRedis(dtoMap, isCorrect);
             }
+            //isCorrect 여부를 rabbitmq로 보낸다
+            System.out.println("rabbitmq 로 채점 결과를 전송해야함 ~ " + "정답 여부는 : " + isCorrect );
         };
     }
 

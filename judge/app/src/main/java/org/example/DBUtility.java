@@ -1,5 +1,7 @@
 package org.example;
 
+import io.lettuce.core.api.sync.RedisCommands;
+
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,7 +10,9 @@ import java.util.Map;
 
 public class DBUtility {
 
-    public boolean isThereSameMySqlSubmit(Map<String, String> dtoMap){
+    Sha256 sha256 = new Sha256();
+
+    public int isThereSameMySqlSubmit(Map<String, String> dtoMap){
         // 빌드 전에 이미 같은 제출 이력이 있는지 확인
         String controller = dtoMap.get("controller");
         String service = dtoMap.get("service");
@@ -23,8 +27,7 @@ public class DBUtility {
 
             while(rs.next()){
                 if(controller.equals(rs.getString("controller_code")) && service.equals(rs.getString("service_code"))){
-                    System.out.println("제출한 코드와 같습니다.");
-                    return true;
+                    return rs.getInt("is_correct");
                 }
             }
 
@@ -32,28 +35,66 @@ public class DBUtility {
             System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
         }
 
-        return false;
+        return -1;
+    }
+
+    public int isThereSameRedisSubmit(Map<String, String> dtoMap){
+        String userId = dtoMap.get("user_id");
+        String problemId = dtoMap.get("problem_id");
+        String controller = dtoMap.get("controller");
+        String service = dtoMap.get("service");
+        String codeHash = sha256.encrypt(controller + service);
+
+        String key = "submit_cache:" + userId + ":" + problemId;
+        RedisCommands<String, String> redisCommands = App.redisConnection.sync();
+
+        String cachedResult = redisCommands.hget(key, codeHash);
+
+        if(cachedResult != null){
+            if(cachedResult.equals("1")){
+                return 1;
+            }else{
+                return 0;
+            }
+        }
+        return -1;
     }
 
 
-    public void updateSQL(Map<String, String> dtoMap, int exitCode){
+    public void insertSQL(Map<String, String> dtoMap, int isCorrect){
         // 채점결과에 따라 db 에 반영하는 부분
-        String problemSubmitId = dtoMap.get("problem_submit_id");
-        String updateSQL = "update problem_submit set is_correct = ? where problem_submit_id = ?";
+        String userId = dtoMap.get("user_id");
+        String problemId = dtoMap.get("problem_id");
+        String controller_code = dtoMap.get("controller");
+        String service_code = dtoMap.get("service");
+
+        String insertSQL = "insert into problem_submit(user_id, problem_id, controller_code, service_code, is_correct) values(?,?,?,?,?)";
 
         try(java.sql.Connection conn = DriverManager.getConnection(App.DB_URL, App.DB_USER, App.DB_PASSWORD);
-            PreparedStatement pstmt = conn.prepareStatement(updateSQL)){
+            PreparedStatement pstmt = conn.prepareStatement(insertSQL)){
 
-            if(exitCode == 0){
-                pstmt.setInt(1, 1);
-            }else{
-                pstmt.setInt(1,0);
-            }
-            pstmt.setString(2, problemSubmitId);
+            pstmt.setString(1, userId);
+            pstmt.setString(2, problemId);
+            pstmt.setString(3, controller_code);
+            pstmt.setString(4, service_code);
+            pstmt.setInt(5, isCorrect);
             pstmt.executeUpdate();
 
         } catch (SQLException e) {
             System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
         }
+    }
+
+    public void insertRedis(Map<String, String> dtoMap, int isCorrect){
+        String userId = dtoMap.get("user_id");
+        String problemId = dtoMap.get("problem_id");
+        String controller = dtoMap.get("controller");
+        String service = dtoMap.get("service");
+        String codeHash = sha256.encrypt(controller + service);
+
+        String key = "submit_cache:" + userId + ":" + problemId;
+        RedisCommands<String, String> redisCommands = App.redisConnection.sync();
+
+        redisCommands.hset(key, codeHash, String.valueOf(isCorrect));
     }
 }
