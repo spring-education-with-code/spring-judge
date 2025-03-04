@@ -16,6 +16,15 @@ public class Test1 {
     MockMvc mockMvc;
 
     @Test
+    public void 더미_테스트_1(){
+
+    }
+
+    @Test
+    public void 더미_테스트_2(){
+
+    }
+    @Test
     public void 출력_확인() throws Exception{
         mockMvc.perform(get("/api/sample"))
                 .andExpect(content().string("hello world!"));

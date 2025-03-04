@@ -80,7 +80,7 @@ public class RabbitmqUtility {
         try {
 
             //dtoMap 에서 controller 받은 코드 파일에 덮어쓰기
-            String basicFilePath = "../src/main/java/com/spring_education/template";
+            String basicFilePath = "../problem-template/main/java/com/spring_education/template";
             String filePath = basicFilePath + "/controller/TestController.java";
             Files.write(Paths.get(filePath), dtoMap.get("controller").getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 
@@ -135,6 +135,11 @@ public class RabbitmqUtility {
             e.printStackTrace();
             return -1;
         }
+    }
+
+    //rabbitmq 에 (중간) 결과를 보내기
+    public void sendResults(String msg){
+
     }
 
 }
