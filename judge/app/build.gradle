@@ -31,6 +31,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
     implementation 'mysql:mysql-connector-java:8.0.33'
     implementation 'io.lettuce:lettuce-core:6.3.2.RELEASE'
+    implementation 'org.junit.platform:junit-platform-launcher:1.11.4'
+    implementation 'org.gradle:gradle-tooling-api:7.3-20210825160000+0000'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

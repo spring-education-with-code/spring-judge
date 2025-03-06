@@ -3,11 +3,21 @@ package org.example;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.DeliverCallback;
+import org.gradle.tooling.BuildLauncher;
+import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ProjectConnection;
+import org.gradle.tooling.events.ProgressEvent;
+import org.gradle.tooling.events.ProgressListener;
+import org.junit.platform.launcher.*;
+import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
+import org.junit.platform.launcher.core.LauncherFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -16,6 +26,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
+import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
+import static org.junit.platform.engine.discovery.DiscoverySelectors.selectPackage;
+import org.junit.platform.launcher.TestPlan;
 
 public class RabbitmqUtility {
     ObjectMapper objectMapper;
@@ -80,7 +93,7 @@ public class RabbitmqUtility {
         try {
 
             //dtoMap 에서 controller 받은 코드 파일에 덮어쓰기
-            String basicFilePath = "../problem-template/main/java/com/spring_education/template";
+            String basicFilePath = "../src/main/java/com/spring_education/template";
             String filePath = basicFilePath + "/controller/TestController.java";
             Files.write(Paths.get(filePath), dtoMap.get("controller").getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 
@@ -96,45 +109,40 @@ public class RabbitmqUtility {
 
     // 빌드 한다
     public int build(Map<String, String> dtoMap){
-        // 빌드
-        try{
-            String gradlewPath = "./gradlew";
+        int result = 0;
+        File projectDir = new File("..");
 
-            ProcessBuilder processBuilder = new ProcessBuilder(gradlewPath, "build");
-            // directory 설정 필수(!!). 이렇게 해야 스프링부트의 graldew 설정하여 잘 작동함
-            processBuilder.directory(new File(".."));
-            Process process = processBuilder.start();
+        // Gradle 프로젝트에 연결
+        try (ProjectConnection connection = GradleConnector.newConnector()
+                .forProjectDirectory(projectDir)
+                .connect()) {
 
-            // 로그 (gradlew build 하면서)
-            String line;
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream())
-            );
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
+            // "test" 태스크를 실행할 BuildLauncher 생성
+            BuildLauncher buildLauncher = connection.newBuild();
+            buildLauncher.forTasks("clean", "test");
 
-            //에러 로그 (gradlew build 하면서)
-            try (BufferedReader errorReader = new BufferedReader(
-                    new InputStreamReader(process.getErrorStream()))) {
-                while ((line = errorReader.readLine()) != null) {
-                    System.err.println(line);
+            // 진행 상황 리스너 등록
+            buildLauncher.addProgressListener(new ProgressListener() {
+                @Override
+                public void statusChanged(ProgressEvent event) {
+                    // <System.out.println("Progress event: " + event.getDisplayName()); 의 출력형태>
+                    // 테스트 성공 시
+                    // Progress event: Test 더미_테스트_1()(com.spring_education.template.Test1) started
+                    // Progress event: Test 더미_테스트_1()(com.spring_education.template.Test1) succeeded
+                    // 테스트 실패 시
+                    // Progress event: Test class com.spring_education.template.Test1 failed
+                    // System.out.println("Progress event: " + event.getDisplayName());
+                    // 이 부분에서 RabbitMQ로 메시지를 전송하는 로직을 추가하면 됩니다.
+                    System.out.println("Progress event: " + event.getDisplayName());
                 }
-            }
+            });
 
-            // 프로세스 종료 대기 및 종료 코드 확인
-            int exitCode = process.waitFor();
-            System.out.println("프로세스 종료 코드: " + exitCode);
-
-            return exitCode;
-
-        }catch(IOException e){
-            e.printStackTrace();
-            return -1;
-        }catch(InterruptedException e){
-            e.printStackTrace();
-            return -1;
+            // 태스크 실행 (실행 중 진행 이벤트가 리스너에 의해 출력됨)
+            buildLauncher.run();
+            System.out.println("테스트 실행 완료");
         }
+
+        return result;
     }
 
     //rabbitmq 에 (중간) 결과를 보내기
@@ -143,3 +151,4 @@ public class RabbitmqUtility {
     }
 
 }
+

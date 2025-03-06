@@ -6,10 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TestController {
     @GetMapping("/api/sample")
     public String helloWorld(){
-        return "hello world!";
+        return "hell world!";
     }
 }
-//
-//
-//
-//
+
