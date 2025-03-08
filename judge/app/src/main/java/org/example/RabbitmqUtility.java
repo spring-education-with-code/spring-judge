@@ -2,7 +2,11 @@ package org.example;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
+import lombok.extern.slf4j.Slf4j;
 import org.gradle.tooling.BuildLauncher;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
@@ -18,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -26,17 +31,24 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
 import static org.junit.platform.engine.discovery.DiscoverySelectors.selectPackage;
 import org.junit.platform.launcher.TestPlan;
 
+@Slf4j
 public class RabbitmqUtility {
+
     ObjectMapper objectMapper;
     DBUtility dbUtility;
+    TestFileUtility testFileUtility;
 
     RabbitmqUtility(){
         objectMapper = new ObjectMapper();
         dbUtility = new DBUtility();
+        testFileUtility = new TestFileUtility();
     }
 
     //dto 관련 변수
@@ -69,7 +81,7 @@ public class RabbitmqUtility {
 
                 }else{
                     //스프링 빌드
-                    int exitCode = build(dtoMap);
+                    int exitCode = build(dtoMap, "1");
 
                     if(exitCode == 0){
                         isCorrect = 1;
@@ -91,7 +103,6 @@ public class RabbitmqUtility {
     // 알맞은 디렉토리에 사용자 코드 (controller, service) 를 붙여넣기
     public void updateContent(Map<String, String> dtoMap){
         try {
-
             //dtoMap 에서 controller 받은 코드 파일에 덮어쓰기
             String basicFilePath = "../src/main/java/com/spring_education/template";
             String filePath = basicFilePath + "/controller/TestController.java";
@@ -107,9 +118,15 @@ public class RabbitmqUtility {
         }
     }
 
-    // 빌드 한다
-    public int build(Map<String, String> dtoMap){
-        int result = 0;
+    // 빌드 한다 (result 0 이 정답인거)
+    public int build(Map<String, String> dtoMap, String userId){
+
+        log.info("build 함수 실행");
+
+        final AtomicInteger result = new AtomicInteger(0);
+        final AtomicInteger passedTestCount = new AtomicInteger(0);
+        int totalTestCount = testFileUtility.countTests();
+
         File projectDir = new File("..");
 
         // Gradle 프로젝트에 연결
@@ -131,9 +148,19 @@ public class RabbitmqUtility {
                     // Progress event: Test 더미_테스트_1()(com.spring_education.template.Test1) succeeded
                     // 테스트 실패 시
                     // Progress event: Test class com.spring_education.template.Test1 failed
-                    // System.out.println("Progress event: " + event.getDisplayName());
-                    // 이 부분에서 RabbitMQ로 메시지를 전송하는 로직을 추가하면 됩니다.
-                    System.out.println("Progress event: " + event.getDisplayName());
+                    String nowEvent = event.getDisplayName();
+
+                    if (nowEvent.contains("case") && nowEvent.contains("succeeded")) {
+                        sendResults(makeResultsMessage(1,1, passedTestCount.incrementAndGet(), totalTestCount));
+                        log.info("test succeed 로그" + passedTestCount.get() + "번째 테스트가 통과되었습니다" + "원본 메세지: " + nowEvent);
+                    }
+
+                    if (nowEvent.contains("case") && nowEvent.contains("failed")) {
+                        sendResults(makeResultsMessage(1,1, -1, totalTestCount));
+                        result.set(1);
+                        log.info("test failed 로그");
+                    }
+
                 }
             });
 
@@ -142,13 +169,41 @@ public class RabbitmqUtility {
             System.out.println("테스트 실행 완료");
         }
 
-        return result;
+        return result.get();
+    }
+
+    public String makeResultsMessage(int userId, int problemId, int solvedTestNum, int totalTestNum){
+        //problemId 는 필요 없을 지도..
+        ResultDTO resultDTO = new ResultDTO(userId, problemId, solvedTestNum, totalTestNum);
+        String message = "";
+        ObjectMapper objectMapper = new ObjectMapper();
+        try{
+            message = objectMapper.writeValueAsString(resultDTO);
+        }catch(JsonProcessingException e){
+            log.error(e.getMessage());
+        }
+
+        return message;
     }
 
     //rabbitmq 에 (중간) 결과를 보내기
-    public void sendResults(String msg){
+    public void sendResults(String message){
 
+        String QUEUE_NAME = "spring.education.result";
+
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+
+        try (Connection connection = factory.newConnection();
+             Channel channel = connection.createChannel()) {
+            // 메시지 발행 (exchange는 기본값인 빈 문자열을 사용)
+            channel.basicPublish("", QUEUE_NAME, null, message.getBytes(StandardCharsets.UTF_8));
+            log.info(" [x] Sent '" + message + "'");
+        }catch(IOException e){
+            log.error(e.getMessage());
+        }catch(TimeoutException e){
+            log.error(e.getMessage());
+        }
     }
-
 }
 

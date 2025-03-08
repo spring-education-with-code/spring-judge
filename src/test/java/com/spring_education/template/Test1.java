@@ -18,17 +18,17 @@ public class Test1 {
     MockMvc mockMvc;
 
     @Test
-    public void 더미_테스트_1(){
+    public void case_1(){
         assertTrue(true);
     }
 
     @Test
-    public void 더미_테스트_2(){
+    public void case_2(){
         assertTrue(true);
     }
 
     @Test
-    public void 출력_확인() throws Exception{
+    public void case_3() throws Exception{
         mockMvc.perform(get("/api/sample"))
                 .andExpect(content().string("hello world!"));
     }
