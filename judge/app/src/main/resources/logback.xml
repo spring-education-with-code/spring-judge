@@ -1,0 +1,1 @@
+<pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} [%clr(%thread){white}] %clr(%-5level) %clr(%logger{36}){cyan} - %msg%n</pattern>
