@@ -65,7 +65,9 @@ public class RabbitmqUtility {
             //알맞은 디렉토리에 사용자 코드 (controller, service) 를 붙여넣기
             updateContent(dtoMap);
 
+
             int isCorrect;
+            /*
             int isThereSameRedisSubmit = dbUtility.isThereSameRedisSubmit(dtoMap);
             if(isThereSameRedisSubmit != -1) {
                 //redis 에 이미 값이 있는 경우
@@ -81,7 +83,9 @@ public class RabbitmqUtility {
 
                 }else{
                     //스프링 빌드
-                    int exitCode = build(dtoMap, "1");
+                    long submitId = dbUtility.insertSQL(dtoMap,0);
+
+                    int exitCode = build(dtoMap, "1", submitId);
 
                     if(exitCode == 0){
                         isCorrect = 1;
@@ -89,14 +93,26 @@ public class RabbitmqUtility {
                         isCorrect = 0;
                     }
 
-                    //db 제출 이력 삽입
-                    dbUtility.insertSQL(dtoMap, isCorrect);
+                    dbUtility.updateSQL(submitId, isCorrect);
                 }
                 //redis에 제출 이력 삽입
                 dbUtility.insertRedis(dtoMap, isCorrect);
             }
+
+             */
+            //스프링 빌드
+            int exitCode = build(dtoMap, "1", Long.valueOf(dtoMap.get("submit_id")));
+
+            if(exitCode == 0){
+                isCorrect = 1;
+            }else{
+                isCorrect = 0;
+            }
+
+            dbUtility.updateSQL(Long.valueOf(dtoMap.get("submit_id")), isCorrect);
+            dbUtility.insertRedis(dtoMap, isCorrect);
             //isCorrect 여부를 rabbitmq로 보낸다
-            System.out.println("rabbitmq 로 채점 결과를 전송해야함 ~ " + "정답 여부는 : " + isCorrect );
+            log.info("rabbitmq 로 채점 결과를 전송해야함 ~ " + "정답 여부는 : " + isCorrect );
         };
     }
 
@@ -119,7 +135,7 @@ public class RabbitmqUtility {
     }
 
     // 빌드 한다 (result 0 이 정답인거)
-    public int build(Map<String, String> dtoMap, String userId){
+    public int build(Map<String, String> dtoMap, String userId, long submitId){
 
         log.info("build 함수 실행");
 
@@ -151,30 +167,32 @@ public class RabbitmqUtility {
                     String nowEvent = event.getDisplayName();
 
                     if (nowEvent.contains("case") && nowEvent.contains("succeeded")) {
-                        sendResults(makeResultsMessage(1,1, passedTestCount.incrementAndGet(), totalTestCount));
+                        sendResults(makeResultsMessage(1,1, submitId, passedTestCount.incrementAndGet(), totalTestCount));
                         log.info("test succeed 로그" + passedTestCount.get() + "번째 테스트가 통과되었습니다" + "원본 메세지: " + nowEvent);
                     }
 
                     if (nowEvent.contains("case") && nowEvent.contains("failed")) {
-                        sendResults(makeResultsMessage(1,1, -1, totalTestCount));
+                        sendResults(makeResultsMessage(1,1, submitId,-1, totalTestCount));
                         result.set(1);
                         log.info("test failed 로그");
                     }
-
                 }
             });
 
             // 태스크 실행 (실행 중 진행 이벤트가 리스너에 의해 출력됨)
             buildLauncher.run();
-            System.out.println("테스트 실행 완료");
+            log.info("테스트 실행 완료");
+        } catch (Exception e) {
+            // 예외 메시지만 로깅하거나 별도로 처리
+            log.error("Build failed: " + e.getMessage());
         }
 
         return result.get();
     }
 
-    public String makeResultsMessage(int userId, int problemId, int solvedTestNum, int totalTestNum){
+    public String makeResultsMessage(int userId, int problemId, long submitId, int solvedTestNum, int totalTestNum){
         //problemId 는 필요 없을 지도..
-        ResultDTO resultDTO = new ResultDTO(userId, problemId, solvedTestNum, totalTestNum);
+        ResultDTO resultDTO = new ResultDTO(userId, problemId, submitId, solvedTestNum, totalTestNum);
         String message = "";
         ObjectMapper objectMapper = new ObjectMapper();
         try{

@@ -2,10 +2,7 @@ package org.example;
 
 import io.lettuce.core.api.sync.RedisCommands;
 
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.Map;
 
 public class DBUtility {
@@ -61,7 +58,7 @@ public class DBUtility {
     }
 
 
-    public void insertSQL(Map<String, String> dtoMap, int isCorrect){
+    public long insertSQL(Map<String, String> dtoMap, int isCorrect){
         // 채점결과에 따라 db 에 반영하는 부분
         String userId = dtoMap.get("user_id");
         String problemId = dtoMap.get("problem_id");
@@ -70,8 +67,10 @@ public class DBUtility {
 
         String insertSQL = "insert into problem_submit(user_id, problem_id, controller_code, service_code, is_correct) values(?,?,?,?,?)";
 
+        long submitId = -1;
+
         try(java.sql.Connection conn = DriverManager.getConnection(App.DB_URL, App.DB_USER, App.DB_PASSWORD);
-            PreparedStatement pstmt = conn.prepareStatement(insertSQL)){
+            PreparedStatement pstmt = conn.prepareStatement(insertSQL, Statement.RETURN_GENERATED_KEYS)){
 
             pstmt.setString(1, userId);
             pstmt.setString(2, problemId);
@@ -80,8 +79,32 @@ public class DBUtility {
             pstmt.setInt(5, isCorrect);
             pstmt.executeUpdate();
 
+
+            try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                if (rs.next()) {
+                    submitId = rs.getLong(1);
+                }
+            }
+
         } catch (SQLException e) {
             System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
+        }
+
+        return submitId;
+    }
+
+    public void updateSQL(long submitId, int isCorrect){
+        String updateSQL = "update problem_submit set is_correct = ? where problem_submit_id = ?";
+
+        try(java.sql.Connection conn = DriverManager.getConnection(App.DB_URL, App.DB_USER, App.DB_PASSWORD);
+            PreparedStatement pstmt = conn.prepareStatement(updateSQL)){
+            pstmt.setInt(1, isCorrect);
+            pstmt.setLong(2, submitId);
+
+            pstmt.executeUpdate();
+
+        }catch(SQLException e){
+            System.err.println("DB 갱신 중 오류 발생: " + e.getMessage());
         }
     }
 

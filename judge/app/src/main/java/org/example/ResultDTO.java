@@ -11,6 +11,7 @@ import lombok.Setter;
 public class ResultDTO {
     int userId;
     int problemId;
+    long submitId;
     int solvedTestNum;
     int totalTestNum;
 }

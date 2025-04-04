@@ -1,8 +1,3 @@
-
 package com.spring_education.template.service;
 
-
-import org.springframework.stereotype.Service;
-
-@Service
-public class TestService{}
+//Service.java 코드를 작성해 주세요
